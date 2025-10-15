@@ -3,133 +3,194 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GPT Ludo</title>
+<title>GPT Ludo Pro</title>
 <style>
-  body { display: flex; flex-direction: column; align-items: center; font-family: sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; }
-  h1 { margin: 20px; color: #333; }
-  #ludoBoard { position: relative; width: 500px; height: 500px; display: grid; grid-template-columns: repeat(15, 1fr); grid-template-rows: repeat(15, 1fr); border: 4px solid #333; }
-  .cell { width: 100%; height: 100%; box-sizing: border-box; border: 1px solid #ccc; display:flex; justify-content:center; align-items:center; font-size:14px; position:relative; }
-  .red { background-color: #f28b82; }
-  .green { background-color: #81c995; }
-  .yellow { background-color: #fff475; }
-  .blue { background-color: #aecbfa; }
-  .safe { border: 2px solid #000; }
-  .token { width: 80%; height: 80%; border-radius: 50%; display:flex; justify-content:center; align-items:center; color:#fff; font-weight:bold; position:absolute; transition: all 0.3s ease; }
-  #dice { margin-top: 15px; width: 80px; height: 80px; display:flex; justify-content:center; align-items:center; font-size:32px; background:#fff; border:3px solid #333; border-radius:10px; cursor:pointer; user-select:none; }
-  #info { margin-top: 10px; font-size:18px; }
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #f0f0f0;
+  margin: 0;
+  font-family: sans-serif;
+}
+h1 { margin: 20px; }
+#ludoBoard {
+  display: grid;
+  grid-template-columns: repeat(15, 40px);
+  grid-template-rows: repeat(15, 40px);
+  gap: 1px;
+  position: relative;
+  background: #333;
+}
+.cell { width: 40px; height: 40px; box-sizing: border-box; }
+.red { background-color: #f28b82; }
+.green { background-color: #81c995; }
+.yellow { background-color: #fff475; }
+.blue { background-color: #aecbfa; }
+.path { background-color: #fff; }
+.home { border: 2px solid #000; }
+
+.token {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  color: #fff;
+  transition: all 0.4s ease;
+  cursor: pointer;
+}
+
+#dice {
+  margin-top: 20px;
+  width: 80px;
+  height: 80px;
+  background-color: #fff;
+  border: 3px solid #333;
+  border-radius: 10px;
+  font-size: 32px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+#info { margin-top: 10px; font-size: 18px; }
 </style>
 </head>
 <body>
-<h1>GPT Ludo</h1>
+<h1>GPT Ludo Pro</h1>
 <div id="ludoBoard"></div>
 <div id="dice">🎲</div>
 <div id="info">Current turn: Red</div>
 
 <script>
-const boardElement = document.getElementById('ludoBoard');
-const diceElement = document.getElementById('dice');
+const board = document.getElementById('ludoBoard');
+const diceEl = document.getElementById('dice');
 const info = document.getElementById('info');
 
 const colors = ['red','green','yellow','blue'];
-let turn = 0; // 0-red,1-green,2-yellow,3-blue
+let turn = 0;
 let diceValue = 0;
 
-// Board representation: 15x15 grid
-let board = Array.from({length:15},()=>Array(15).fill(null));
+// Home positions for tokens
+const homePositions = {
+  red: [[0,0],[0,1],[1,0],[1,1]],
+  green: [[0,13],[0,14],[1,13],[1,14]],
+  yellow:[[13,0],[13,1],[14,0],[14,1]],
+  blue:[[13,13],[13,14],[14,13],[14,14]]
+};
+
+// Safe zones
+const safeCells=[[6,6],[6,8],[8,6],[8,8]];
+
+// Paths for each color
+const paths = {
+  red:[[2,6],[3,6],[4,6],[5,6],[6,6],[6,5],[6,4],[6,3],[6,2],[7,2],[8,2],[8,3],[8,4],[8,5],[8,6],[9,6],[10,6],[11,6],[12,6],[12,7],[12,8]],
+  green:[[6,12],[6,11],[6,10],[6,9],[6,8],[5,8],[4,8],[3,8],[2,8],[2,7],[2,6],[3,6],[4,6],[5,6],[6,6],[6,5],[6,4],[6,3],[6,2],[7,2],[8,2]],
+  yellow:[[12,6],[11,6],[10,6],[9,6],[8,6],[8,5],[8,4],[8,3],[8,2],[7,2],[6,2],[6,3],[6,4],[6,5],[6,6],[5,6],[4,6],[3,6],[2,6],[2,7],[2,8]],
+  blue:[[6,0],[6,1],[6,2],[6,3],[6,4],[7,4],[8,4],[9,4],[10,4],[10,5],[10,6],[9,6],[8,6],[7,6],[6,6],[6,7],[6,8],[6,9],[6,10],[5,10],[4,10]]
+};
+
+// Create tokens
 let tokens = { red:[], green:[], yellow:[], blue:[] };
-
-// Initialize board cells
-function initBoard(){
-  boardElement.innerHTML='';
-  for(let r=0;r<15;r++){
-    for(let c=0;c<15;c++){
-      const cell = document.createElement('div');
-      cell.classList.add('cell');
-      cell.dataset.row = r;
-      cell.dataset.col = c;
-      boardElement.appendChild(cell);
-    }
-  }
-  initTokens();
-}
-
-// Initialize tokens
-function initTokens(){
-  const positions = {
-    red: [[1,1],[1,3],[3,1],[3,3]],
-    green: [[1,11],[1,13],[3,11],[3,13]],
-    yellow: [[11,1],[11,3],[13,1],[13,3]],
-    blue: [[11,11],[11,13],[13,11],[13,13]]
-  };
-  colors.forEach(color=>{
-    positions[color].forEach((pos,i)=>{
-      const token = document.createElement('div');
-      token.classList.add('token',color);
-      token.textContent = i+1;
-      token.style.gridRowStart = pos[0]+1;
-      token.style.gridColumnStart = pos[1]+1;
-      boardElement.appendChild(token);
-      tokens[color].push({element:token,row:pos[0],col:pos[1],home:true,steps:0});
-    });
+colors.forEach(color=>{
+  homePositions[color].forEach((pos,i)=>{
+    const token = document.createElement('div');
+    token.classList.add('token',color);
+    token.textContent=i+1;
+    board.appendChild(token);
+    tokens[color].push({element:token,row:pos[0],col:pos[1],home:true,steps:0,index:i});
+    updateToken(tokens[color][i]);
   });
-}
-
-// Dice roll
-diceElement.addEventListener('click',()=>{
-  diceValue = Math.floor(Math.random()*6)+1;
-  diceElement.textContent = '🎲 '+diceValue;
-  info.textContent = `Current turn: ${colors[turn]} (rolled ${diceValue})`;
 });
 
-// Move token
-function moveToken(color,index,steps){
-  const token = tokens[color][index];
-  if(token.home && diceValue!==6) return; // can't leave home unless 6
-  if(token.home && diceValue===6){ token.home=false; token.steps=1; token.row=startingPoint(color)[0]; token.col=startingPoint(color)[1]; updateToken(token); return; }
-  if(!token.home){
-    token.steps += steps;
-    const [r,c] = pathForColor(color,token.steps);
-    if(r!==null && c!==null){
-      token.row=r; token.col=c;
-      updateToken(token);
-    }
+// Draw board cells
+for(let r=0;r<15;r++){
+  for(let c=0;c<15;c++){
+    const cell = document.createElement('div');
+    cell.classList.add('cell');
+    // Home areas
+    if(r<2 && c<2) cell.classList.add('red','home');
+    else if(r<2 && c>12) cell.classList.add('green','home');
+    else if(r>12 && c<2) cell.classList.add('yellow','home');
+    else if(r>12 && c>12) cell.classList.add('blue','home');
+    board.appendChild(cell);
   }
-  if(diceValue!==6) turn = (turn+1)%4;
-  info.textContent = `Current turn: ${colors[turn]}`;
 }
 
 // Update token position
 function updateToken(token){
-  token.element.style.transform = `translate(${token.col*33}px, ${token.row*33}px)`;
+  token.element.style.transform=`translate(${token.col*40}px,${token.row*40}px)`;
 }
 
-// Starting point
-function startingPoint(color){
-  if(color==='red') return [4,0];
-  if(color==='green') return [0,10];
-  if(color==='yellow') return [10,0];
-  if(color==='blue') return [10,10];
-}
-
-// Path for each token (simplified linear path)
-function pathForColor(color,steps){
-  // For simplicity, define linear paths
-  const path = {
-    red:[[4,0],[4,1],[4,2],[4,3],[4,4],[5,4],[6,4],[6,5],[6,6],[5,6],[4,6],[4,7],[4,8],[5,8],[6,8],[6,9],[6,10],[5,10],[4,10],[4,11],[4,12],[4,13],[4,14]],
-    green:[[0,10],[1,10],[2,10],[3,10],[4,10],[4,9],[4,8],[5,8],[6,8],[6,7],[6,6],[7,6],[8,6],[8,7],[8,8],[9,8],[10,8],[10,9],[10,10],[11,10],[12,10],[13,10],[14,10]],
-    yellow:[[10,0],[10,1],[10,2],[10,3],[10,4],[9,4],[8,4],[8,5],[8,6],[9,6],[10,6],[10,7],[10,8],[9,8],[8,8],[8,9],[8,10],[9,10],[10,10],[10,11],[10,12],[10,13],[10,14]],
-    blue:[[10,10],[10,11],[10,12],[10,13],[10,14],[9,14],[8,14],[8,13],[8,12],[7,12],[6,12],[6,11],[6,10],[5,10],[4,10],[4,11],[4,12],[5,12],[6,12],[6,13],[6,14],[7,14],[8,14]]
-  };
-  if(steps-1<path[color].length) return path[color][steps-1];
-  return [null,null];
-}
-
-// Simple interaction: move first token on click after dice
-boardElement.addEventListener('click',()=>{
-  moveToken(colors[turn],0,diceValue);
+// Dice roll
+diceEl.addEventListener('click',()=>{
+  diceValue = Math.floor(Math.random()*6)+1;
+  diceEl.textContent='🎲 '+diceValue;
+  info.textContent=`Current turn: ${colors[turn]} (rolled ${diceValue})`;
 });
 
-initBoard();
+// Move token
+function moveToken(color){
+  const playerTokens = tokens[color];
+  let moved=false;
+  for(let t of playerTokens){
+    if(t.home && diceValue===6){
+      t.home=false; t.steps=1; [t.row,t.col]=paths[color][0]; updateToken(t); moved=true; break;
+    } else if(!t.home){
+      const nextStep = t.steps + diceValue;
+      if(nextStep<=paths[color].length){
+        t.steps=nextStep;
+        [t.row,t.col]=paths[color][t.steps-1];
+        updateToken(t);
+        moved=true;
+        break;
+      }
+    }
+  }
+  if(!moved && diceValue!==6) turn=(turn+1)%4;
+  checkCapture(color);
+  checkWin(color);
+  info.textContent=`Current turn: ${colors[turn]}`;
+}
+
+// Capture logic
+function checkCapture(color){
+  const allTokens = [].concat(tokens.red,tokens.green,tokens.yellow,tokens.blue);
+  const playerTokens = tokens[color];
+  for(let t of playerTokens){
+    for(let ot of allTokens){
+      if(ot!==t && !isSafe(ot) && ot.row===t.row && ot.col===t.col){
+        ot.home=true; ot.steps=0; resetHome(ot); 
+      }
+    }
+  }
+}
+
+// Reset token to home
+function resetHome(token){
+  [token.row,token.col]=homePositions[token.element.classList[1]][token.index];
+  updateToken(token);
+}
+
+// Safe zone check
+function isSafe(token){
+  return safeCells.some(s=>s[0]===token.row && s[1]===token.col);
+}
+
+// Check win
+function checkWin(color){
+  const finished = tokens[color].filter(t=>t.steps===paths[color].length);
+  if(finished.length===4){
+    setTimeout(()=>alert(`${color.toUpperCase()} wins! 🎉`),100);
+  }
+}
+
+// Click board to move token
+board.addEventListener('click',()=>moveToken(colors[turn]));
 </script>
 </body>
 </html>
